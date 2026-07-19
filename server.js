@@ -132,6 +132,26 @@ app.post('/api/admin/verify', (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== LEADERBOARD ====================
+app.get('/api/leaderboard', (req, res) => {
+  const users = loadUsers();
+  const entries = [];
+  for (const [name, data] of Object.entries(users)) {
+    if (name.startsWith('Guest_')) continue;
+    const stats = data.stats || {};
+    entries.push({
+      username: name,
+      coins: stats.coins || 0,
+      battleWins: stats.battleWins || 0,
+      battleRating: stats.battleRating || 1000,
+      totalOpenings: stats.totalOpenings || 0,
+      inventoryCount: (data.inventory || []).length,
+    });
+  }
+  entries.sort((a, b) => b.battleRating - a.battleRating);
+  res.json({ ok: true, entries: entries.slice(0, 50) });
+});
+
 // ==================== WEBSOCKET ====================
 const online = {}; // username -> { ws, username }
 
@@ -280,6 +300,17 @@ wss.on('connection', (ws) => {
         const users = loadUsers();
         if (users[currentUser]) {
           users[currentUser].inventory = inventory || [];
+          saveUsers(users);
+        }
+        break;
+      }
+
+      case 'sync_stats': {
+        if (!currentUser) return;
+        const { stats } = msg;
+        const users = loadUsers();
+        if (users[currentUser]) {
+          users[currentUser].stats = stats || {};
           saveUsers(users);
         }
         break;
