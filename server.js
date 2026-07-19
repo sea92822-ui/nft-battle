@@ -154,6 +154,7 @@ app.get('/api/leaderboard', (req, res) => {
 
 // ==================== WEBSOCKET ====================
 const online = {}; // username -> { ws, username }
+const tradeSessions = {}; // username -> partnerUsername
 
 function isAdmin(username) {
   const users = loadUsers();
@@ -214,81 +215,86 @@ wss.on('connection', (ws) => {
         break;
       }
 
-      case 'trade_propose': {
-        const { target, giveItems, getItems } = msg; // giveItems/getItems = array of {id, uid, data}
+      // ==================== TRADE SYSTEM (REWRITTEN) ====================
+      // tradeSessions[username] = partnerUsername
+      // Server only tracks who's connected to whom; items/coins are client-side.
+
+      case 'trade_request': {
+        const { target } = msg;
         if (!target || !online[target]) {
           ws.send(JSON.stringify({ type: 'trade_error', error: 'Player offline' }));
           return;
         }
-        online[target].ws.send(JSON.stringify({
-          type: 'trade_request',
-          from: currentUser,
-          giveItems: getItems, // their perspective: they give getItems
-          getItems: giveItems,
-        }));
-        ws.send(JSON.stringify({ type: 'trade_sent', target }));
+        if (tradeSessions[currentUser]) {
+          ws.send(JSON.stringify({ type: 'trade_error', error: 'Already in a trade' }));
+          return;
+        }
+        if (tradeSessions[target]) {
+          ws.send(JSON.stringify({ type: 'trade_error', error: 'Player is already trading' }));
+          return;
+        }
+        online[target].ws.send(JSON.stringify({ type: 'trade_incoming', from: currentUser }));
+        ws.send(JSON.stringify({ type: 'trade_request_sent', target }));
         break;
       }
 
       case 'trade_accept': {
-        const { target } = msg;
-        if (!target || !online[target]) return;
-        online[target].ws.send(JSON.stringify({ type: 'trade_accepted', by: currentUser }));
+        const { from } = msg;
+        if (!from || !online[from]) return;
+        if (tradeSessions[currentUser]) return;
+        if (tradeSessions[from]) return;
+        tradeSessions[currentUser] = from;
+        tradeSessions[from] = currentUser;
+        online[from].ws.send(JSON.stringify({ type: 'trade_started', partner: currentUser }));
+        ws.send(JSON.stringify({ type: 'trade_started', partner: from }));
         break;
       }
 
-      case 'trade_cancel': {
-        const { target } = msg;
-        if (target && online[target]) {
-          online[target].ws.send(JSON.stringify({ type: 'trade_cancelled', by: currentUser }));
+      case 'trade_decline': {
+        const { from } = msg;
+        if (from && online[from]) {
+          online[from].ws.send(JSON.stringify({ type: 'trade_declined', by: currentUser }));
         }
         break;
       }
 
-      case 'trade_confirm': {
-        const { target, giveItems, getItems } = msg;
-        if (!target || !online[target]) return;
-        // Execute trade immediately — send trade_executed to both
-        online[target].ws.send(JSON.stringify({
-          type: 'trade_executed',
+      case 'trade_offer_update': {
+        const partner = tradeSessions[currentUser];
+        if (!partner || !online[partner]) return;
+        online[partner].ws.send(JSON.stringify({
+          type: 'trade_offer_updated',
           from: currentUser,
-          giveItems: getItems || [],
-          getItems: giveItems || [],
-        }));
-        ws.send(JSON.stringify({
-          type: 'trade_executed',
-          from: target,
-          giveItems: giveItems || [],
-          getItems: getItems || [],
+          offerItems: msg.offerItems || [],
         }));
         break;
       }
 
-      case 'trade_execute': {
-        const { target, myGive, myGet } = msg;
-        // myGive = items this player gives away
-        // myGet = items this player receives
-        if (!target || !online[target]) return;
-        // Notify both to execute
-        online[target].ws.send(JSON.stringify({
-          type: 'trade_executed',
-          from: currentUser,
-          giveItems: myGet, // they give myGet items
-          getItems: myGive, // they get myGive items
-        }));
-        ws.send(JSON.stringify({
-          type: 'trade_executed',
-          from: target,
-          giveItems: myGive,
-          getItems: myGet,
-        }));
+      case 'trade_confirm_trade': {
+        const partner = tradeSessions[currentUser];
+        if (!partner || !online[partner]) return;
+        online[partner].ws.send(JSON.stringify({ type: 'trade_partner_confirmed', from: currentUser }));
+        ws.send(JSON.stringify({ type: 'trade_awaiting' }));
         break;
       }
 
-      case 'trade_final_cancel': {
-        const { target } = msg;
-        if (target && online[target]) {
-          online[target].ws.send(JSON.stringify({ type: 'trade_final_cancelled', by: currentUser }));
+      case 'trade_execute_now': {
+        const partner = tradeSessions[currentUser];
+        if (!partner || !online[partner]) return;
+        online[partner].ws.send(JSON.stringify({ type: 'trade_do_execute' }));
+        ws.send(JSON.stringify({ type: 'trade_do_execute' }));
+        delete tradeSessions[currentUser];
+        delete tradeSessions[partner];
+        break;
+      }
+
+      case 'trade_cancel': {
+        const partner = tradeSessions[currentUser];
+        if (partner) {
+          if (online[partner]) {
+            online[partner].ws.send(JSON.stringify({ type: 'trade_cancelled', by: currentUser }));
+          }
+          delete tradeSessions[currentUser];
+          delete tradeSessions[partner];
         }
         break;
       }
@@ -493,6 +499,15 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (currentUser) {
+      // Cleanup trade sessions
+      const partner = tradeSessions[currentUser];
+      if (partner) {
+        if (online[partner]) {
+          try { online[partner].ws.send(JSON.stringify({ type: 'trade_cancelled', by: currentUser })); } catch {}
+        }
+        delete tradeSessions[partner];
+        delete tradeSessions[currentUser];
+      }
       delete online[currentUser];
       broadcastOnline();
     }
