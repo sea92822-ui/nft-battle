@@ -539,6 +539,11 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (currentUser) {
+      // Only remove from online if THIS ws is still the current one
+      if (online[currentUser] && online[currentUser].ws === ws) {
+        delete online[currentUser];
+        broadcastOnline();
+      }
       // Cleanup trade sessions
       const partner = tradeSessions[currentUser];
       if (partner) {
@@ -550,8 +555,6 @@ wss.on('connection', (ws) => {
         delete tradeConfirmations[partner];
         delete tradeConfirmations[currentUser];
       }
-      delete online[currentUser];
-      broadcastOnline();
     }
   });
 
