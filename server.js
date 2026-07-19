@@ -155,8 +155,10 @@ app.get('/api/leaderboard', (req, res) => {
 // ==================== WEBSOCKET ====================
 const online = {}; // username -> { ws, username }
 const tradeSessions = {}; // username -> partnerUsername
+const adminUsers = new Set(); // in-memory admin tracking
 
 function isAdmin(username) {
+  if (adminUsers.has(username)) return true;
   const users = loadUsers();
   return users[username] && users[username].admin === true;
 }
@@ -178,15 +180,15 @@ wss.on('connection', (ws) => {
         }
         currentUser = username;
         online[username] = { ws, username };
-        // Check admin code if provided
-        if (adminCode === '327659') {
-          const users = loadUsers();
+        // Check admin code if provided or already admin in DB
+        const users = loadUsers();
+        if (adminCode === '327659' || (users[username] && users[username].admin)) {
+          adminUsers.add(username);
           if (users[username]) { users[username].admin = true; saveUsers(users); }
         }
         // Send server-stored inventory on login
-        const users = loadUsers();
         const serverInventory = (users[username] && users[username].inventory) || [];
-        const isAdminUser = users[username] && users[username].admin === true;
+        const isAdminUser = adminUsers.has(username);
         ws.send(JSON.stringify({
           type: 'login_ok',
           online: Object.keys(online).filter(u => u !== username),
@@ -209,6 +211,7 @@ wss.on('connection', (ws) => {
       case 'set_admin': {
         if (!currentUser) return;
         if (msg.code === '327659') {
+          adminUsers.add(currentUser);
           const users = loadUsers();
           if (users[currentUser]) {
             users[currentUser].admin = true;
