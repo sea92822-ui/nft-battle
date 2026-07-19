@@ -155,6 +155,7 @@ app.get('/api/leaderboard', (req, res) => {
 // ==================== WEBSOCKET ====================
 const online = {}; // username -> { ws, username }
 const tradeSessions = {}; // username -> partnerUsername
+const tradeConfirmations = {}; // username -> true (has confirmed)
 const adminUsers = new Set(); // in-memory admin tracking
 
 function isAdmin(username) {
@@ -268,6 +269,8 @@ wss.on('connection', (ws) => {
         if (tradeSessions[from]) return;
         tradeSessions[currentUser] = from;
         tradeSessions[from] = currentUser;
+        tradeConfirmations[currentUser] = false;
+        tradeConfirmations[from] = false;
         online[from].ws.send(JSON.stringify({ type: 'trade_started', partner: currentUser }));
         ws.send(JSON.stringify({ type: 'trade_started', partner: from }));
         break;
@@ -295,8 +298,16 @@ wss.on('connection', (ws) => {
       case 'trade_confirm_trade': {
         const partner = tradeSessions[currentUser];
         if (!partner || !online[partner]) return;
+        tradeConfirmations[currentUser] = true;
         online[partner].ws.send(JSON.stringify({ type: 'trade_partner_confirmed', from: currentUser }));
         ws.send(JSON.stringify({ type: 'trade_awaiting' }));
+        // Check if both confirmed
+        if (tradeConfirmations[currentUser] && tradeConfirmations[partner]) {
+          delete tradeConfirmations[currentUser];
+          delete tradeConfirmations[partner];
+          online[partner].ws.send(JSON.stringify({ type: 'trade_both_confirmed' }));
+          ws.send(JSON.stringify({ type: 'trade_both_confirmed' }));
+        }
         break;
       }
 
@@ -307,6 +318,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'trade_do_execute' }));
         delete tradeSessions[currentUser];
         delete tradeSessions[partner];
+        delete tradeConfirmations[currentUser];
+        delete tradeConfirmations[partner];
         break;
       }
 
@@ -318,6 +331,8 @@ wss.on('connection', (ws) => {
           }
           delete tradeSessions[currentUser];
           delete tradeSessions[partner];
+          delete tradeConfirmations[currentUser];
+          delete tradeConfirmations[partner];
         }
         break;
       }
@@ -530,6 +545,8 @@ wss.on('connection', (ws) => {
         }
         delete tradeSessions[partner];
         delete tradeSessions[currentUser];
+        delete tradeConfirmations[partner];
+        delete tradeConfirmations[currentUser];
       }
       delete online[currentUser];
       broadcastOnline();
