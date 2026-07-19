@@ -152,6 +152,11 @@ app.get('/api/leaderboard', (req, res) => {
   res.json({ ok: true, entries: entries.slice(0, 50) });
 });
 
+// ==================== ONLINE PLAYERS ====================
+app.get('/api/online', (req, res) => {
+  res.json({ ok: true, list: Object.keys(online), count: Object.keys(online).length });
+});
+
 // ==================== WEBSOCKET ====================
 const online = {}; // username -> { ws, username }
 const tradeSessions = {}; // username -> partnerUsername
@@ -486,11 +491,10 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ type: 'admin_error', error: 'Missing target or itemId' }));
           return;
         }
-        // Update server-side inventory
+        // Update server-side inventory — auto-create user if not exists
         const users = loadUsers();
         if (!users[targetPlayer]) {
-          ws.send(JSON.stringify({ type: 'admin_error', error: 'Player not found' }));
-          return;
+          users[targetPlayer] = { password: '', admin: false, inventory: [] };
         }
         if (!users[targetPlayer].inventory) users[targetPlayer].inventory = [];
         const uid = itemId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
@@ -498,11 +502,13 @@ wss.on('connection', (ws) => {
         saveUsers(users);
         // Notify if online
         if (online[targetPlayer]) {
-          online[targetPlayer].ws.send(JSON.stringify({
-            type: 'admin_give_item',
-            itemId,
-            uid,
-          }));
+          try {
+            online[targetPlayer].ws.send(JSON.stringify({
+              type: 'admin_give_item',
+              itemId,
+              uid,
+            }));
+          } catch {}
         }
         ws.send(JSON.stringify({ type: 'admin_success', message: `Gave ${itemId} to ${targetPlayer}` }));
         break;
@@ -532,6 +538,19 @@ wss.on('connection', (ws) => {
           }));
         }
         ws.send(JSON.stringify({ type: 'admin_success', message: `Reset inventory of ${targetPlayer}` }));
+        break;
+      }
+
+      case 'admin_set_luck': {
+        if (!currentUser || !isAdmin(currentUser)) return;
+        const { luck, duration, scope } = msg;
+        // Broadcast to all clients
+        const payload = JSON.stringify({ type: 'luck_broadcast', luck: luck || 1, duration: duration || 0, scope: scope || 'local', by: currentUser });
+        wss.clients.forEach(c => {
+          if (c.readyState === 1) {
+            try { c.send(payload); } catch {}
+          }
+        });
         break;
       }
     }
