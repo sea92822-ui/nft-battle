@@ -1,0 +1,10 @@
+import fs from 'fs';
+const h = fs.readFileSync('index.html', 'utf8');
+console.log('Image constants:', h.includes('const JELLY_BUNNY_IMG'));
+console.log('ITEMS_DATA jelly_bunny:', h.includes("id: 'jelly_bunny'"));
+console.log('ton_case:', h.includes("id: 'ton_case'"));
+console.log('ITEM_PRICES jelly_bunny:', h.includes('jelly_bunny: 10001'));
+console.log('ICON_FALLBACK JELLY_BUNNY:', h.includes("'JELLY_BUNNY_IMG': '🐰'"));
+console.log('ICON_VALUES SNOP_DOG:', h.includes('SNOP_DOG_GOLD_IMG'));
+console.log('ICON_ALTS SNOP_DOG:', h.includes("SNOP_DOG_GOLD_IMG:'🐕'"));
+console.log('File length:', h.length);

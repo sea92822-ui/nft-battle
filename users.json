@@ -1,0 +1,22 @@
+{
+  "555": {
+    "password": "$2a$10$579gL4bMFqYqb.nJJOKRaO.E82cb9sEjc934vYFSdG2zng3k2EQfG",
+    "admin": true,
+    "inventory": [
+      {
+        "id": "cigara_smoke_nukem",
+        "uid": "1784134527181_6jsv2"
+      }
+    ]
+  },
+  "spoxys": {
+    "password": "$2a$10$s7BeMFjjObwRCUsF/2L.neneID2TQD8GdVyE0f9hveDFWlmtTJE..",
+    "admin": false,
+    "inventory": []
+  },
+  "KO6TIK": {
+    "password": "$2a$10$ZMl99q7pjjvO/yTqGxbeNuNu8IDmlTImvDE9AHVWzNAkSjRsyhhsm",
+    "admin": false,
+    "inventory": []
+  }
+}
