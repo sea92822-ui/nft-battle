@@ -171,20 +171,27 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
 
       case 'login': {
-        const { username } = msg;
+        const { username, adminCode } = msg;
         // disconnect old session if same user
         if (online[username]) {
           try { online[username].ws.close(); } catch {}
         }
         currentUser = username;
         online[username] = { ws, username };
+        // Check admin code if provided
+        if (adminCode === '327659') {
+          const users = loadUsers();
+          if (users[username]) { users[username].admin = true; saveUsers(users); }
+        }
         // Send server-stored inventory on login
         const users = loadUsers();
         const serverInventory = (users[username] && users[username].inventory) || [];
+        const isAdminUser = users[username] && users[username].admin === true;
         ws.send(JSON.stringify({
           type: 'login_ok',
           online: Object.keys(online).filter(u => u !== username),
           inventory: serverInventory,
+          isAdmin: isAdminUser,
         }));
         broadcastOnline();
         break;
