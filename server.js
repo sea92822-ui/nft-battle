@@ -229,11 +229,13 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ type: 'find_result', found: false, error: 'Invalid target' }));
           return;
         }
-        const found = online[target];
+        const targetLower = target.toLowerCase();
+        const foundKey = Object.keys(online).find(k => k.toLowerCase() === targetLower);
+        const found = foundKey ? online[foundKey] : null;
         ws.send(JSON.stringify({
           type: 'find_result',
           found: !!found,
-          target,
+          target: found ? foundKey : target,
           online: !!found,
         }));
         break;
